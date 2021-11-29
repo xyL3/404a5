@@ -6,7 +6,7 @@
     <meta content='width=device-width; height=device-height; initial-scale=1.0; maximum-scale=1.0; user-scalable=0;' name='viewport' />
     <meta name="viewport" content="width=device-width" />
     <meta name="license" content="
-        Copyright 2013 Google, Abram Hindle
+        Copyright 2013 Google, Abram Hindle, 2021 Xueying Luo
         
         Licensed under the Apache License, Version 2.0 (the "License");
         you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@
     "/>
     <script src="json2.js"></script>
   </head> 
-  <body bgcolor="white" height="100%" width="100%"> 
+  <body bgcolor="black" height="100%" width="100%"> 
     <div id="debug"></div>
     <canvas id="c" width="100%" height="100%" style="-webkit-tap-highlight-color: transparent;"></canvas> 
 
@@ -59,6 +59,43 @@ function drawCircle(context,entity) {
     }
 }
 
+// draw star - https://stackoverflow.com/a/25840319
+function drawStar(context, entity) {
+
+    spikes=5;
+    outerRadius = entity["radius"];
+    innerRadius = outerRadius/2;
+
+    var ctx=canvas.getContext("2d");
+    var rot = Math.PI / 2 * 3;
+    var cx = entity["x"];
+    var cy = entity["y"];
+    var step = Math.PI / spikes;
+
+    ctx.strokeSyle = "#000";
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - outerRadius)
+    for (i = 0; i < spikes; i++) {
+        x = cx + Math.cos(rot) * outerRadius;
+        y = cy + Math.sin(rot) * outerRadius;
+        ctx.lineTo(x, y)
+        rot += step
+
+        x = cx + Math.cos(rot) * innerRadius;
+        y = cy + Math.sin(rot) * innerRadius;
+        ctx.lineTo(x, y)
+        rot += step
+    }
+    ctx.lineTo(cx, cy - outerRadius)
+    ctx.closePath();
+    ctx.lineWidth=5;
+    ctx.strokeStyle='white';
+    ctx.stroke();
+    ctx.fillStyle=entity["colour"];
+    ctx.fill();
+
+}
+
 function prepEntity(entity) {
     if (!entity["colour"]) {
         entity["colour"] = "#FF0000";
@@ -69,13 +106,17 @@ function prepEntity(entity) {
     return entity;
 }
 
+var image = document.createElement("img");
+image.src = 'ghost.jpeg';
+
 function clearFrame() {
     with(context) {
 	moveTo(0,0);
-	fillStyle = "#000";
-	fillRect(0,0,W,H);
-    }
+    pattern = createPattern(image, 'repeat');
+    fillStyle = pattern;
+    fillRect(0, 0, W, H);
 
+    }
 }
 
 // This actually draws the frame
@@ -83,7 +124,8 @@ function renderFrame() {
     clearFrame();
     for (var key in world) {
         var entity = world[key];
-        drawCircle(context,prepEntity(entity));
+        // drawCircle(context,prepEntity(entity));
+        drawStar(context,prepEntity(entity));
     }
 }
 
@@ -125,6 +167,9 @@ function addEntity(entity, data) {
     world[entity] = data;
     drawNextFrame(); // (but should we?)
     //XXX: Send a XHTML Request that updates the entity you just modified!
+    msg = {};
+    msg[entity] = data;
+    socket.send(JSON.stringify(msg));
 }
 var counter = 0;
 function addEntityWithoutName(data) {
@@ -231,16 +276,15 @@ mouse = (function() {
 // Add the application specific mouse listeners!
 //XXX: TODO Make these prettier!
 mouse.mousedowners.push(function(x,y,clicked,e) {
-    addEntityWithoutName({'x':x,'y':y,'colour':'blue'});
+    addEntityWithoutName({'x':x,'y':y,'colour':'skyblue', 'radius':20});
 });
 
 mouse.mouseuppers.push(function(x,y,clicked,e) {
-    addEntityWithoutName({'x':x,'y':y,'colour':'red'});
+    addEntityWithoutName({'x':x,'y':y,'colour':'skyblue','radius':20});
 });
 
 mouse.mousedraggers.push(function(x,y,clicked,e) {
-    addEntityWithoutName({'x':x,'y':y,'colour':'green',
-                          'radius':10});
+    addEntityWithoutName({'x':x,'y':y,'colour':'yellow','radius':10});
 });
 
 
@@ -254,6 +298,7 @@ function wsSetup() {
     socket = new WebSocket(url);
     socket.onopen = function() {
         //XXX: TODO What are you going to do here?
+        socket.send(JSON.stringify(world));
     };
     socket.onerror = function(msg) {
         debug("WebSocket Error:" + msg.data);
@@ -261,7 +306,15 @@ function wsSetup() {
     socket.onmessage = function(msg) {  
         try {
             debug("WebSocket Recv:" + msg.data);
-            //XXX: TODO What are you going to do here?            
+            //XXX: TODO What are you going to do here?     
+            
+            var data = JSON.parse(msg.data);
+            for (var entity in data) {
+                world[entity]=data[entity];
+            }
+            
+            drawNextFrame();
+            
         } catch (e) {
             alert("socket on message: " + e);
         }
